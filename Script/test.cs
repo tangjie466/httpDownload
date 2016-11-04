@@ -45,7 +45,7 @@ public class test : MonoBehaviour {
 		if (!System.IO.File.Exists (reslist)) {
 			isGetReslist = true;
 			h=null;
-			h = new HttpUtils(new HttpUtils.SucDelegate(getReslistComplete),new HttpUtils.FailDelegate(getReslistFail));
+			h = new HttpUtils(new HttpUtils.SucDelegate(getReslistComplete),new HttpUtils.FailDelegate(getReslistFail),0);
 			h.DownLoadBundle("/res/resList.txt");
 			return;
 		}
@@ -54,18 +54,30 @@ public class test : MonoBehaviour {
 		string line;
 		string data;
 		while ((line = sr.ReadLine())!=null) {
-			data = line.Split(',')[0];
+			data = line;
 			resl.Add(data);
 		}
 		isStart =true;
 		num = resl.Count;
 		isGetRes = true;
+
 	}
 	void getReslistComplete(string s)
 	{
 
-		getRelist ();
-
+		string res = System.Text.Encoding.Default.GetString(h.help.Bytes);
+		string[] reslist = res.Split('\n');
+		for(int i=0;i<reslist.Length;i++)
+		{
+			string s1 = reslist[i];
+			resl.Add(s1);
+		}
+		FileUtils.Instance.CreateFile (h.help.FilePath);
+		Debug.LogError ("reslist num is " + reslist.Length);
+		isStart =true;
+		num = resl.Count;
+		isGetRes = true;
+		isGetReslist = false;
 	}
 
 	void getReslistFail(string s)
@@ -79,6 +91,7 @@ public class test : MonoBehaviour {
 			del.Add(s);
 			completnum++;
 		}
+		h.destory ();
 	}
 
 	void fail(string s)
@@ -99,12 +112,13 @@ public class test : MonoBehaviour {
 			}
 
 			if (cur.Count < maxnum) {
-				if (curnum > resl.Count - 1)
-				{
+				if (curnum > resl.Count - 1) {
 
-				}else{
-					string s = resl [curnum];
-					HttpUtils h = new HttpUtils (new HttpUtils.SucDelegate (suc), new HttpUtils.FailDelegate (fail));
+				} else {
+
+					string s = resl [curnum].Split(',')[0];
+					HttpUtils h = new HttpUtils (new HttpUtils.SucDelegate (suc), new HttpUtils.FailDelegate (fail), 0);
+
 					cur.Add (s, h);
 					h.DownLoadBundle (s);
 					curnum++;
@@ -114,7 +128,7 @@ public class test : MonoBehaviour {
 			foreach (DictionaryEntry h in cur) {
 				((HttpUtils)h.Value).update ();
 			}
-			Debug.Log("complete num is "+completnum+" totle num is "+num+" del count is "+del.Count);
+			Debug.Log ("complete num is " + completnum + " totle num is " + num + " del count is " + del.Count);
 			if (completnum == num && del.Count == 0) {
 				isStart = false;
 				Debug.LogError ("success time is " + (Time.realtimeSinceStartup - t));
@@ -123,6 +137,11 @@ public class test : MonoBehaviour {
 			}
 
 
+		} else {
+			if(h != null )
+			{
+				h.update();
+			}
 		} 
 	}
 	void OnGUI()
@@ -149,22 +168,27 @@ public class test : MonoBehaviour {
 		}
 
 		if (isGetReslist) {
-			GUI.TextArea (new Rect (0, 100+50, 300, 30), h.help.assetName + "");
-			GUI.TextArea (new Rect (300, 100+50, 200, 30), "cur size :" + h.help.getProgress + "");
-			GUI.TextArea (new Rect (500, 100+50, 200, 30), "totle size :" + h.help.getContLength + "");
+			GUI.TextArea (new Rect (0, 100+50, 300, 30), h.help.FilePath + "");
+			GUI.TextArea (new Rect (300, 100+50, 200, 30), "cur size :" + h.help.CurrentSize + "");
+			GUI.TextArea (new Rect (500, 100+50, 200, 30), "totle size :" + h.help.ToTleSize + "");
 		}
 
 
 		int i = 0;
 		foreach (DictionaryEntry hh in cur) {
 			HttpUtils h = (HttpUtils)hh.Value;
-			GUI.TextArea (new Rect (0, 100+i*50, 300, 30), h.help.assetName + "");
-			GUI.TextArea (new Rect (300, 100+i*50, 200, 30), "cur size :" + h.help.getProgress + "");
-			GUI.TextArea (new Rect (500, 100+i*50, 200, 30), "totle size :" + h.help.getContLength + "");
+			GUI.TextArea (new Rect (0, 100+i*50, 300, 30), h.help.FilePath + "");
+			GUI.TextArea (new Rect (300, 100+i*50, 200, 30), "cur size :" + h.help.CurrentSize+ "");
+			GUI.TextArea (new Rect (500, 100+i*50, 200, 30), "totle size :" + h.help.ToTleSize + "");
 			i++;
 		}
 
 
 		
+	}
+
+	void OnApplicationQuit()
+	{
+		MyThread.DownLoadThreadPool.instance.isStop = true;
 	}
 }

@@ -7,94 +7,68 @@ using System.IO;
 using MyThread;
 internal class WebReqData
 {
-	private FileStream fileStream;
 	public static  int requestTimeout = 10000;
 	public static  int readTimeout = 5000;
 	public static  int responseTimeout = 5000;
-	public const int BufferSize = 1024 *2;
+	public static  int BufferSize = 1024 *2;
 	public static  int sleepTime = 100;
-	public Stream OrginalStream;
-	public HttpWebResponse WebResponse;
-	private string filePath = string.Empty;
-	public string FilePath
-	{
-		get{return filePath;}
-	}
-
-	public WebReqData(String filePath)
-	{
-		Buffer = new byte[BufferSize];
-		this.filePath = filePath;
-
-
-	}
-	public FileStream getFileStream(FileMode mode)
-	{
-		string saveFile = filePath.Substring(0,filePath.LastIndexOf('/'));
-		if (Directory.Exists(saveFile) == false)//如果不存在就创建file文件夹
-		{
-			Directory.CreateDirectory(saveFile);
-		}
-		if (System.IO.File.Exists(filePath)) 
-		{ 
-			if(mode == FileMode.Create)
-			{
-				System.IO.File.Delete(filePath);
-				fileStream = new FileStream(filePath,mode);
-				return fileStream;
-			}
-			fileStream= System.IO.File.OpenWrite(filePath); 
-
-
-		} 
-		else 
-		{ 
-			fileStream = new FileStream (filePath,mode);
-		}
-
-		return fileStream;
-	}
-
 }
 
 public class HttpHelper{
+	private string downLoadUrl = string.Empty;
+	private long totleSize = 0;
+	private int currentSize = 0;
 	byte[] bytes;
 	const int MAX_SIZE = 1024 * 1024 * 8;
-	long contlength = 0;
-	long curContLength = 0;
 	public bool isDone = false;
 	public string url = string.Empty;
+	private string filePath = string.Empty;
+
+	public void destory()
+	{
+		Array.Clear (bytes, 0, bytes.Length);
+		bytes = null;
+	}
+
 	public byte[] Bytes
 	{
-		get{return bytes};
-	}
-	public long getProgress
-	{
-		get{return curContLength;}
+		get{return bytes;}
 	}
 
-	public long getContLength
+	public int CurrentSize
 	{
-		get{return contlength;}
+		get{return currentSize;}
+		set{currentSize = value;}
 	}
-
-
-	string savePath = null;
-	public string assetName;
-	public HttpHelper(int size)
+	
+	public long ToTleSize
 	{
-		bytes = new byte[size];
+		get{return totleSize;}
+		set{totleSize = value;}
+	}
+	
+	public string UrlPath
+	{
+		get{return downLoadUrl;}
+		set{downLoadUrl = value;}
+	}
+	
+	public string FilePath
+	{
+		get{return filePath;}
+		set{filePath = value;}
+	}
+	public HttpHelper()
+	{
+		totleSize = 0;
+		bytes = new byte[MAX_SIZE];
+
 	}
 	public void init()
 	{
-		contlength = 0;
-		curContLength = 0;
+		Array.Clear (bytes, 0, bytes.Length);
+		currentSize = 0;
 		isDone = false;
-	}
-	public string SavePath
-	{
-		get{return savePath;}
-		set{savePath = value;}
 	}
 
 	public void continueDownload(string url,string filename)
@@ -103,22 +77,26 @@ public class HttpHelper{
 		if (DownLoadThreadPool.instance.isStop) {
 			return;
 		}
-		assetName = filename;
+		UrlPath = url;
+		filePath = filename;
 		HttpWebRequest req = null;
 		HttpWebResponse response = null;
-		WebReqData reqData = null;
-		FileStream fileStream = null;
+		Stream responseStream = null;
 		try{
-			reqData = new WebReqData (savePath + assetName);
-			fileStream = reqData.getFileStream (FileMode.Append);
-			curContLength = fileStream.Length;
-			fileStream.Seek(curContLength,SeekOrigin.Current);
+			int cur_len = bytes.Length;
+			if(cur_len != currentSize)
+			{
+				Debug.LogError(" curentsize is "+currentSize+" , bytes size is "+cur_len+",file path is"+filePath);
+			}
 			req = WebRequest.Create (url+filename) as HttpWebRequest;
-			req.AddRange((int)curContLength);
+			req.AddRange((int)currentSize);
 			req.Timeout = WebReqData.requestTimeout;
 			req.ReadWriteTimeout = WebReqData.responseTimeout;
 			response = (HttpWebResponse)req.GetResponse ();
-			contlength = response.ContentLength + curContLength;
+			if(totleSize == 0)
+			{
+				totleSize = response.ContentLength;
+			}
 			if (response.StatusCode != HttpStatusCode.OK && response.StatusCode != HttpStatusCode.PartialContent) {
 				response.Close();
 				req.Abort();
@@ -126,13 +104,12 @@ public class HttpHelper{
 				isDone = true;
 				return;
 			}
-			reqData.WebResponse = response;
-			reqData.OrginalStream = response.GetResponseStream ();
+			responseStream = response.GetResponseStream ();
 			
-			reqData.OrginalStream.ReadTimeout = WebReqData.readTimeout;
-			int len = reqData.OrginalStream.Read(reqData.Buffer,0,WebReqData.BufferSize);
+			responseStream.ReadTimeout = WebReqData.readTimeout;
+			int len = responseStream.Read(bytes,currentSize,WebReqData.BufferSize);
 
-			curContLength += len;
+			currentSize += len;
 			while(len > 0)
 			{
 				if(DownLoadThreadPool.instance.isStop)
@@ -140,24 +117,17 @@ public class HttpHelper{
 					
 					break;
 				}
-				
-				fileStream.Write(reqData.Buffer,0,len);
-				fileStream.Flush();
-				len = reqData.OrginalStream.Read(reqData.Buffer,0,WebReqData.BufferSize);
-				curContLength += len;
+				len = responseStream.Read(bytes,currentSize,WebReqData.BufferSize);
+				currentSize += len;
 			}
 
-
-
-			fileStream.Close ();
-			fileStream = null;
-			reqData.OrginalStream.Close ();
-			reqData.OrginalStream = null;
-			reqData.WebResponse.Close ();
-			reqData.WebResponse = null;
+			response.Close();
+			response = null;
+			responseStream.Close();
+			responseStream = null;
 			req.Abort ();
 			req = null;
-			if(curContLength < contlength)
+			if(currentSize < totleSize)
 			{
 				continueDownload(url,filename);
 			}else{
@@ -169,17 +139,15 @@ public class HttpHelper{
 		}catch(Exception e)
 		{
 			Debug.LogError("url is "+url+filename+" exception is "+e.Message);
-			if(fileStream != null)
+			if(response != null)
 			{
-				fileStream.Close();
-				fileStream = null;
+				response.Close();
+				response = null;
 			}
-			if(reqData != null)
+			if(responseStream != null)
 			{
-				reqData.OrginalStream.Close();
-				reqData.OrginalStream = null;
-				reqData.WebResponse.Close();
-				reqData.WebResponse = null;
+				responseStream.Close();
+				responseStream = null;
 			}
 			if(req != null)
 			{
@@ -199,35 +167,35 @@ public class HttpHelper{
 			return;
 		}
 
-		assetName = filename;
+		UrlPath = url;
 		HttpWebRequest req = null;
 		HttpWebResponse response = null;
-		WebReqData reqData = null;
 		Stream responseStream = null;
-		FileStream fileStream = null;
-
 		try{
-			req = WebRequest.Create (url+filename) as HttpWebRequest;
+			req = WebRequest.Create (url+filePath) as HttpWebRequest;
 			req.Timeout = WebReqData.requestTimeout;
 			req.ReadWriteTimeout = WebReqData.responseTimeout;
-			
 			response = (HttpWebResponse)req.GetResponse ();
-			contlength = response.ContentLength;
+			long contlength = response.ContentLength;
+			if(totleSize == 0)
+			{
+				totleSize = contlength;
+			}
+			if(contlength != 0 && contlength != totleSize)
+			{
+				Debug.LogError("contlength is "+contlength+" , totlesize is "+totleSize+" filepath is "+filePath);
+			}
+
 			if (response.StatusCode != HttpStatusCode.OK) {
 				response.Close();
 				req.Abort();
 				isDone = true;
 				return;
 			}
-			reqData = new WebReqData (savePath + assetName);
-			reqData.WebResponse = response;
 			responseStream = response.GetResponseStream ();
-			reqData.OrginalStream = responseStream;
-
-			reqData.OrginalStream.ReadTimeout = WebReqData.readTimeout;
-			int len = reqData.OrginalStream.Read(reqData.Buffer,0,WebReqData.BufferSize);
-			fileStream = reqData.getFileStream (FileMode.Create);
-			curContLength += len;
+			responseStream.ReadTimeout = WebReqData.readTimeout;
+			int len = responseStream.Read(bytes,0,WebReqData.BufferSize);
+			currentSize += len;
 			while(len > 0)
 			{
 				if(DownLoadThreadPool.instance.isStop)
@@ -235,37 +203,36 @@ public class HttpHelper{
 
 					break;
 				}
-					
-				fileStream.Write(reqData.Buffer,0,len);
-				fileStream.Flush();
-				len = reqData.OrginalStream.Read(reqData.Buffer,0,WebReqData.BufferSize);
-				curContLength += len;
+				len = responseStream.Read(bytes,currentSize,WebReqData.BufferSize);
+				currentSize += len;
 			}
-
-			fileStream.Close ();
-			fileStream = null;
-			reqData.OrginalStream.Close ();
-			reqData.OrginalStream = null;
-			reqData.WebResponse.Close ();
-			reqData.WebResponse = null;
+			responseStream.Close();
+			responseStream = null;
+			response.Close();
+			response = null;
 			req.Abort ();
 			req = null;
-			isDone = true;
+			if(currentSize < totleSize)
+			{
+				continueDownload(url,filename);
+			}else{
+				isDone = true;
+				Debug.LogError ("sucess");
+			}
 		}
 		catch(Exception e)
 		{
 			Debug.LogError("url is "+url+filename+" exception is "+e.Message);
-			if(fileStream != null)
+
+			if(response != null)
 			{
-				fileStream.Close();
-				fileStream = null;
+				response.Close();
+				response = null;
 			}
-			if(reqData != null)
+			if(responseStream != null)
 			{
-				reqData.OrginalStream.Close();
-				reqData.OrginalStream = null;
-				reqData.WebResponse.Close();
-				reqData.WebResponse = null;
+				responseStream.Close();
+				responseStream = null;
 			}
 			if(req != null)
 			{
@@ -277,6 +244,7 @@ public class HttpHelper{
 			Debug.LogError("fail");
 		}
 	}
+
 
 
 
