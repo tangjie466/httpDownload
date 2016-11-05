@@ -14,9 +14,9 @@ public class HttpUtils{
 	SucDelegate suc;
 	FailDelegate fail;
 
-	public HttpUtils(SucDelegate s,FailDelegate f,int size)
+	public HttpUtils(SucDelegate s,FailDelegate f)
 	{
-		help = new HttpHelper(size);
+		help = new HttpHelper();
 		suc = s;
 		fail = f;
 	}

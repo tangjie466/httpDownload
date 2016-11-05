@@ -67,6 +67,7 @@ public class HttpHelper{
 	public void init()
 	{
 		Array.Clear (bytes, 0, bytes.Length);
+		totleSize = 0;
 		currentSize = 0;
 		isDone = false;
 	}

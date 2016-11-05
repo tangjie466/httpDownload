@@ -15,7 +15,7 @@ public class test : MonoBehaviour {
 	Hashtable cur = new Hashtable ();
 	List<string> resl = new List<string> ();
 	List<string> del = new List<string>();
-	string reslist;
+	string res_list = string.Empty;
 	float t = 0;
 	bool isStart = false;
 	bool isGetRes = false;
@@ -23,11 +23,11 @@ public class test : MonoBehaviour {
 	int curnum = 0;
 	int num = 0;
 	int completnum = 0;
-
+	static string rootPath = Application.streamingAssetsPath;
 	// Use this for initialization
 	void Awake()
 	{
-		reslist = Application.persistentDataPath+"/res/resList.txt";
+		res_list = Application.streamingAssetsPath+"/res/resList.txt";
 
 
 	}
@@ -42,10 +42,18 @@ public class test : MonoBehaviour {
 	
 	void getRelist()
 	{
+		{
+			isGetReslist = true;
+			h=null;
+			h = new HttpUtils(new HttpUtils.SucDelegate(getReslistComplete),new HttpUtils.FailDelegate(getReslistFail));
+			h.DownLoadBundle("/res/resList.txt");
+			return;
+		}
+		/*
 		if (!System.IO.File.Exists (reslist)) {
 			isGetReslist = true;
 			h=null;
-			h = new HttpUtils(new HttpUtils.SucDelegate(getReslistComplete),new HttpUtils.FailDelegate(getReslistFail),0);
+			h = new HttpUtils(new HttpUtils.SucDelegate(getReslistComplete),new HttpUtils.FailDelegate(getReslistFail));
 			h.DownLoadBundle("/res/resList.txt");
 			return;
 		}
@@ -60,10 +68,13 @@ public class test : MonoBehaviour {
 		isStart =true;
 		num = resl.Count;
 		isGetRes = true;
-
+	*/
 	}
 	void getReslistComplete(string s)
 	{
+		FileStream f = FileUtils.Instance.CreateFile(res_list);
+		f.Write(h.help.Bytes,0,(int)h.help.ToTleSize);
+		FileUtils.Instance.close(f);
 
 		string res = System.Text.Encoding.Default.GetString(h.help.Bytes);
 		string[] reslist = res.Split('\n');
@@ -72,12 +83,13 @@ public class test : MonoBehaviour {
 			string s1 = reslist[i];
 			resl.Add(s1);
 		}
-		FileUtils.Instance.CreateFile (h.help.FilePath);
 		Debug.LogError ("reslist num is " + reslist.Length);
 		isStart =true;
 		num = resl.Count;
 		isGetRes = true;
 		isGetReslist = false;
+		h.destory();
+		h = null;
 	}
 
 	void getReslistFail(string s)
@@ -88,10 +100,13 @@ public class test : MonoBehaviour {
 	void suc(string s)
 	{
 		if (cur.Contains (s) && !del.Contains(s)) {
+			HttpUtils h = (HttpUtils)cur[s];
+			FileStream f = FileUtils.Instance.CreateFile(rootPath+h.help.FilePath);
+			f.Write(h.help.Bytes,0,(int)h.help.ToTleSize);
+			FileUtils.Instance.close(f);
 			del.Add(s);
 			completnum++;
 		}
-		h.destory ();
 	}
 
 	void fail(string s)
@@ -106,6 +121,9 @@ public class test : MonoBehaviour {
 		if (isStart) {
 			if (del.Count > 0) {
 				while (del.Count>0) {
+					HttpUtils h = (HttpUtils)cur[del[0]];
+					h.destory();
+					h=null;
 					cur.Remove (del [0]);
 					del.RemoveAt (0);
 				}
@@ -117,7 +135,7 @@ public class test : MonoBehaviour {
 				} else {
 
 					string s = resl [curnum].Split(',')[0];
-					HttpUtils h = new HttpUtils (new HttpUtils.SucDelegate (suc), new HttpUtils.FailDelegate (fail), 0);
+					HttpUtils h = new HttpUtils (new HttpUtils.SucDelegate (suc), new HttpUtils.FailDelegate (fail));
 
 					cur.Add (s, h);
 					h.DownLoadBundle (s);
